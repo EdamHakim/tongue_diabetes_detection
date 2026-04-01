@@ -1,3 +1,5 @@
 data/
 data.zip/
 deploy_bundle/
+node_modules/
+.env
