@@ -3,4 +3,5 @@ data.zip/
 deploy_bundle/
 node_modules/
 datapreped/
+externaldataset/
 .env
