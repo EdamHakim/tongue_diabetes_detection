@@ -1,7 +1,9 @@
 data/
 data.zip/
 deploy_bundle/
+deploy_bundle_old/
 node_modules/
 datapreped/
 externaldataset/
+datapreped_old/
 .env
