@@ -6,4 +6,5 @@ node_modules/
 datapreped/
 externaldataset/
 datapreped_old/
+models/
 .env
