@@ -18,6 +18,8 @@ The primary goal of this notebook is to transform raw, unbalanced data into a st
 ### The Importance of `family_id`
 All augmented versions of an original image share the same source identity (referred to as a `family_id` or canonical group). A naive random split would leak these variations across training and validation, leading to "over-optimistic" (inflated) metrics. The pipeline performs a **stratified group split**, ensuring that all variations of a single tongue image stay together in the same split for honest evaluation.
 
+The same problem exists one level up: the source dataset photographs each participant several times, and those photos are numbered consecutively. Splitting single photos at random would put near-identical shots of one person in both train and test. The split therefore uses **participant blocks** (10 consecutive photo numbers per block, see `participant_key`) as the grouping unit.
+
 
 ---
 

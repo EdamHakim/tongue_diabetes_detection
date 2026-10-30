@@ -32,14 +32,14 @@ flowchart LR
 
 ## 🧩 Data preparation
 
-`tongue-dataprep.ipynb` loads the raw dataset from a Kaggle input path, deduplicates image families with a canonical grouping key, applies offline Albumentations augmentation, and performs a stratified group split so that all variants of the same original image stay in the same split.
+`tongue-dataprep.ipynb` loads the raw dataset from a Kaggle input path, deduplicates image families with a canonical grouping key, applies offline Albumentations augmentation, and performs a stratified group split by participant block. The source dataset photographs each participant several times and numbers those photos consecutively (`r_d_(56)`, `r_d_(57)`, ...), so blocks of 10 consecutive numbers are kept in one split together with all their augmented variants.
 
 ### Key behavior
 
 - 📥 Reads the source data from `/kaggle/input/datasets/edamhakim/t2d-tongue-dataset/data/preprocessedcropped`.
 - 🎛️ Uses offline augmentation with horizontal flip, shift/scale/rotate, brightness/contrast, blur, noise, and motion blur.
 - ⚖️ Balances the classes with controlled oversampling, capped per family.
-- ✂️ Splits the dataset into `70/15/15` for `train/val/test`.
+- ✂️ Splits participant blocks into `70/15/15` for `train/val/test` (block size set by `participant_block_size`).
 - 🧪 Verifies leakage with both group-level checks and MD5 hash overlap checks.
 - 📁 Writes the final dataset to `/kaggle/working/train`, `/kaggle/working/val`, and `/kaggle/working/test`.
 - 🗜️ Creates downloadable archives: `train.zip`, `val.zip`, `test.zip`, and `tongue_preped_bundle.zip`.
