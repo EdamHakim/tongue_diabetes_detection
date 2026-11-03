@@ -9,3 +9,4 @@ datapreped_old/
 models/
 .env
 paper/
+t2d_tongue_detection/analysis/
