@@ -13,12 +13,12 @@ The primary goal of this notebook is to transform raw, unbalanced data into a st
 *   **Offline Augmentation**: Uses the `albumentations` library to perform horizontal flips, shifts, scales, rotations, and brightness/contrast adjustments.
 *   **Automated Balancing**: It calculates the distribution of classes and performs controlled oversampling for the minority class (diabetes) until the dataset is balanced across all splits.
 *   **Verification**: Includes MD5 hash collision checks to prove that no identical images exist across different splits.
-*   **Output**: Generates a structured directory (`train/`, `val/`, `test/`) and bundles them into ZIP files for easy distribution.
+*   **Output**: In `cv` mode (default) one `pool/` directory plus `manifest.csv` with 5-fold assignments for three grouping schemes; in `split` mode the earlier `train/`, `val/`, `test/` directories.
 
 ### The Importance of `family_id`
 All augmented versions of an original image share the same source identity (referred to as a `family_id` or canonical group). A naive random split would leak these variations across training and validation, leading to "over-optimistic" (inflated) metrics. The pipeline performs a **stratified group split**, ensuring that all variations of a single tongue image stay together in the same split for honest evaluation.
 
-The same problem exists one level up: the source dataset photographs each participant several times, and those photos are numbered consecutively. Splitting single photos at random would put near-identical shots of one person in both train and test. The split therefore uses **participant blocks** (10 consecutive photo numbers per block, see `participant_key`) as the grouping unit.
+The same problem exists one level up: the source dataset photographs each participant several times, and those photos are numbered consecutively. Splitting single photos at random would put near-identical shots of one person in both train and test. Blocks of 10 consecutive numbers (`participant_key`) were the first fix, but file order tracks participants only for about the first 155 files per class: later files have same-person partners far away in the numbering. The notebook therefore also builds **identity clusters** from image similarity (SIFT+RANSAC inliers and colour histograms) and assigns folds for three schemes, `photo`, `block` and `cluster`, so the effect of each grouping can be measured on the same images.
 
 
 ---
@@ -29,11 +29,10 @@ This notebook handles the architecture selection, training logic, and performanc
 
 ### Key Components:
 *   **Preprocessing Pipeline**:
-    *   **MediaPipe Integration**: Uses Google's MediaPipe Face Mesh to detect inner lip landmarks and crop the tongue area accurately.
-    *   **Circular Masking**: Applies a radial gradient mask to center the model's attention on the tongue texture and ignore background artifacts.
+    *   **Circular Masking**: Applies a radial gradient mask to center the model's attention on the tongue texture and ignore background artifacts. The inverted mask (periphery only) is used as a shortcut probe.
 *   **Model Architectures**:
     We compared three backbones, selected specifically for their performance on small medical datasets:
-    1.  **EfficientNet-B2 (Primary)**: At 9.2M parameters, it's highly sample-efficient. Its compound scaling (depth+width+resolution) extracts the rich color and texture features critical for tongue diagnosis without overfitting on small samples.
+    1.  **EfficientNet-B2**: At 7.7M parameters with the new head, it is sample-efficient; fine-tuning also unfreezes its final `conv_head` and `bn2`. Its compound scaling (depth+width+resolution) extracts the rich color and texture features critical for tongue diagnosis without overfitting on small samples.
     2.  **ResNet-50 (Baseline)**: Chosen as the "sweet spot" in the ResNet family. While ResNet-18/34 are too shallow for subtle texture features, and ResNet-101/152 overfit on small medical datasets, ResNet-50 provides the optimal depth. Its use of "bottleneck" blocks (1x1 convolutions) allows for sophisticated feature extraction with a manageable parameter count. It is also the most common benchmark in Traditional Chinese Medicine (TCM) imaging literature.
     3.  **MobileNet-V3-Large**: Selected for its low parameter count (4.2M) and depthwise separable convolutions, allowing for larger batch sizes on Kaggle GPUs and suitability for mobile deployment.
 
@@ -52,7 +51,8 @@ Given the dataset size (~250 unique images per class), Vision Transformers (ViT/
     *   **Mixup Augmentation**: Blends images and labels to improve generalization.
     *   **Two-Stage Training**: A "warmup" phase for the classifier followed by a "fine-tuning" phase where late backbone layers are unfrozen.
 *   **Evaluation & Explainability**:
-    *   **Threshold Tuning**: Optimizes the probability threshold to reach a specific **Precision target (e.g., >90%)**, ensuring the model is reliable for clinical scenarios.
+    *   **Cross-Validation**: Each fold uses the next fold as validation (early stopping, checkpoint, threshold) and is tested once; pooled out-of-fold predictions give AUC with identity-cluster bootstrap intervals, per-person AUC and paired differences between grouping schemes. A colour-histogram baseline runs on the same folds.
+    *   **Threshold Tuning**: Chooses the threshold on validation that maximizes recall with precision ≥ 0.90 (ties to the highest threshold). Precision on a balanced set does not carry over to a screening population, so PPV is also reported at 11.1% and 5% prevalence.
     *   **Grad-CAM Visualization**: Produces heatmaps highlighting the regions of the tongue (e.g., coating, color, or edge cracks) that influenced the model's prediction.
 
 ---
@@ -62,6 +62,6 @@ Given the dataset size (~250 unique images per class), Vision Transformers (ViT/
 | :--- | :--- |
 | **Framework** | PyTorch |
 | **Augmentation** | Albumentations, Torchvision |
-| **Vision Tools** | MediaPipe, OpenCV |
+| **Vision Tools** | OpenCV (SIFT, colour histograms) |
 | **Metrics** | Scikit-learn (ROC-AUC, PR-AUC, F1) |
 | **Explainability** | Pytorch-Grad-CAM |

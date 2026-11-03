@@ -6,16 +6,16 @@
 
 | Item | Details |
 |---|---|
-| 🧪 Data prep | Offline augmentation, class balancing, stratified group split, leakage checks |
+| 🧪 Data prep | Offline augmentation, class balancing, identity clusters, 5-fold group CV manifest, leakage checks |
 | 🧠 Training | EfficientNet-B2, ResNet-50, MobileNetV3-Large |
-| 📊 Evaluation | PR-AUC selection, threshold tuning, test evaluation with participant-block intervals and screening PPV |
+| 📊 Evaluation | 5-fold CV under three grouping schemes, identity-cluster bootstrap intervals, paired leakage differences, screening PPV, calibration |
 | 🔍 Explainability | Grad-CAM visualizations and confusion matrices |
-| 📦 Output | Kaggle-ready split dataset plus model checkpoints and plots |
+| 📦 Output | Kaggle-ready pool + `manifest.csv`, out-of-fold predictions, summary tables and plots |
 
 ## 📚 What’s inside
 
-- [tongue-dataprep.ipynb](tongue-dataprep.ipynb) - offline augmentation, group-aware splitting, leakage checks, and Kaggle-ready export.
-- [tongue_t2d_training.ipynb](tongue_t2d_training.ipynb) - training, validation, model selection, threshold tuning, test evaluation, and explainability artifacts.
+- [tongue-dataprep.ipynb](tongue-dataprep.ipynb) - offline augmentation, identity clustering, fold assignment, leakage checks, and Kaggle-ready export.
+- [tongue_t2d_training.ipynb](tongue_t2d_training.ipynb) - cross-validated training, threshold tuning, pooled out-of-fold evaluation, colour baseline, and Grad-CAM.
 - [notebooks_explanation.md](notebooks_explanation.md) - plain-language description of the notebook workflow.
 
 ## 🧭 Workflow
@@ -23,33 +23,33 @@
 ```mermaid
 flowchart LR
     A[Raw tongue images] --> B[tongue-dataprep.ipynb]
-    B --> C[train / val / test splits]
+    B --> C[pool + manifest.csv with 5 folds x 3 schemes]
     C --> D[tongue_t2d_training.ipynb]
-    D --> E[Best model checkpoint]
-    D --> F[Threshold tuned metrics]
-    D --> G[PR curve, confusion matrix, Grad-CAM]
+    D --> E[oof_probs.csv]
+    D --> F[cv_summary.csv, cv_deltas.csv, reliability.png]
+    D --> G[Grad-CAM]
 ```
 
 ## 🧩 Data preparation
 
-`tongue-dataprep.ipynb` loads the raw dataset from a Kaggle input path, deduplicates image families with a canonical grouping key, applies offline Albumentations augmentation, and performs a stratified group split by participant block. The source dataset photographs each participant several times and numbers those photos consecutively (`r_d_(56)`, `r_d_(57)`, ...), so blocks of 10 consecutive numbers are kept in one split together with all their augmented variants.
+`tongue-dataprep.ipynb` loads the raw dataset from a Kaggle input path, deduplicates image families with a canonical grouping key, applies offline Albumentations augmentation, and assigns 5 cross-validation folds under three grouping schemes. Each participant was photographed several times. Consecutive file numbers (`r_d_(56)`, `r_d_(57)`, ...) track participants only for about the first 155 files per class; later files have same-person partners far away in the numbering. The notebook therefore also groups photos into identity clusters by image similarity (SIFT+RANSAC inliers and colour histograms), and every augmented copy shares its original's fold.
 
 ### Key behavior
 
 - 📥 Reads the source data from `/kaggle/input/datasets/edamhakim/t2d-tongue-dataset/data/preprocessedcropped`.
 - 🎛️ Uses offline augmentation with horizontal flip, shift/scale/rotate, brightness/contrast, blur, noise, and motion blur.
 - ⚖️ Balances the classes with controlled oversampling, capped per family.
-- ✂️ Splits participant blocks into `70/15/15` for `train/val/test` (block size set by `participant_block_size`); with 25 blocks per class this gives 34/8/8 blocks in total.
-- 🔀 `CONFIG['split_unit'] = 'photo'` splits single photos instead of blocks. This leaks other photos of the same participant and is only for the leakage comparison.
-- 🧪 Verifies leakage with both group-level checks and MD5 hash overlap checks.
-- 📁 Writes the final dataset to `/kaggle/working/train`, `/kaggle/working/val`, and `/kaggle/working/test`.
-- 🗜️ Creates downloadable archives: `train.zip`, `val.zip`, `test.zip`, and `tongue_preped_bundle.zip`.
+- 🧩 `CONFIG['mode'] = 'cv'` (default) writes one pool and `manifest.csv` with columns `file, cls, label, family, number, is_orig, group_{photo,block,cluster}, fold_{photo,block,cluster}`. `photo` treats each photo as a group (leaks other photos of the same person), `block` uses 10 consecutive numbers, `cluster` uses identity clusters.
+- ✂️ `CONFIG['mode'] = 'split'` keeps the earlier single `70/15/15` split by participant block (or by photo with `CONFIG['split_unit'] = 'photo'`).
+- 🌍 `DATA_ROOT` and `OUTPUT_BASE` can be overridden with environment variables for local runs.
+- 🧪 Verifies that no group spans two folds or both classes, that every fold holds both classes, and that no byte-identical file crosses folds (MD5).
+- 📁 Writes `/kaggle/working/pool/<class>/` and `manifest.csv` in `cv` mode, or `train`/`val`/`test` in `split` mode, plus zip archives.
 
 The notebook is intended to be published as a Kaggle dataset named `tongue_preped`.
 
 ## 🧠 Training
 
-`tongue_t2d_training.ipynb` trains and compares three pretrained CNN backbones:
+`tongue_t2d_training.ipynb` reads `manifest.csv` and runs 5-fold cross-validation (test = fold k, validation = fold k+1, training = the other three folds) for six configurations: ResNet-50 under the `photo`, `block` and `cluster` schemes, MobileNetV3-Large and EfficientNet-B2 under `cluster`, and ResNet-50 on the image periphery only (tongue disc masked out) under `cluster`. The three backbones are:
 
 - EfficientNet-B2
 - ResNet-50
@@ -57,18 +57,18 @@ The notebook is intended to be published as a Kaggle dataset named `tongue_prepe
 
 It uses a binary classification setup with the following techniques:
 
-- 🩺 MediaPipe-based tongue standardization when available.
-- ⭕ Circular masking to reduce background influence.
+- ⭕ Circular masking to reduce background influence (inverted for the periphery-only shortcut probe).
 - 🎯 Weighted sampling to rebalance the training loader.
 - 🔥 Focal loss with $\gamma=2.0$ to emphasize hard examples.
 - 🔄 Two-stage transfer learning with a warmup phase and a fine-tuning phase.
 - 🧬 Mixup augmentation during training.
-- 📈 PR-AUC-based model selection.
-- 🎚️ Threshold tuning to satisfy a precision target on validation data.
-- 🧭 Grad-CAM visualizations for correct test images and for the highest-scoring false positives.
-- 📏 Participant-block intervals (per-block specificity, block bootstrap ROC-AUC) and PPV/NPV at 11.1% and 5% prevalence.
+- 📈 Checkpoint selection by validation PR-AUC, ties broken by lower validation loss.
+- 🎚️ Threshold tuning on validation (maximize recall subject to precision ≥ 0.90, ties to the highest threshold).
+- 📏 Pooled out-of-fold ROC-AUC with identity-cluster bootstrap intervals, per-person AUC, paired AUC differences between schemes, PPV at 11.1% and 5% prevalence, Brier score and reliability curve.
+- 🎨 Colour-histogram + logistic-regression baseline on the same folds.
+- 🧭 Grad-CAM for fold 0 of the cluster-scheme ResNet-50, including the highest-scoring false positives.
 
-Change `cfg.seed` to repeat training with another seed. The notebook still evaluates the Kaggle "external" set, but a near-duplicate audit (`analysis/dedup.py`, `analysis/sift_verify.py`) showed that about a third of it re-uses the development photographs, so those numbers are not external validation.
+Set `RUN_ONLY` (comma-separated `CONFIGS` indices) to split the 30 runs across Kaggle sessions; runs already in `oof_probs.csv` are skipped. `SMOKE=1` runs a one-epoch, three-batch check of every configuration without pretrained weights. The Kaggle "external" set is no longer evaluated: a near-duplicate audit showed that about a third of it re-uses the development photographs.
 
 ## 🛠️ Requirements
 
@@ -82,66 +82,48 @@ The notebooks rely on the following main libraries:
 - NumPy
 - pandas
 - scikit-learn
-- MediaPipe
 - pytorch-grad-cam
 - matplotlib
 - seaborn
 - Pillow
 
-The training notebook installs `grad-cam` and `mediapipe` with a notebook cell, so a Kaggle or notebook environment with internet access is assumed unless those packages are already available.
+The training notebook installs `grad-cam` with a notebook cell, so a Kaggle or notebook environment with internet access is assumed unless those packages are already available.
 
 ## 🚀 How to run
 
 ### 1) Prepare the dataset
 
-Run `tongue-dataprep.ipynb` first. Confirm that the following folders and archives are created in `/kaggle/working`:
-
-- `/kaggle/working/train/<class_name>/`
-- `/kaggle/working/val/<class_name>/`
-- `/kaggle/working/test/<class_name>/`
-- `/kaggle/working/train.zip`
-- `/kaggle/working/val.zip`
-- `/kaggle/working/test.zip`
-- `/kaggle/working/tongue_preped_bundle.zip`
+Run `tongue-dataprep.ipynb` first (mode `cv`). Confirm that `/kaggle/working/pool/<class_name>/` and `/kaggle/working/manifest.csv` exist and that the fold checks printed no assertion errors.
 
 Then publish the result as a Kaggle dataset and mount it into the training notebook.
 
 ### 2) Update the training paths
 
-Before running `tongue_t2d_training.ipynb`, verify the `CFG` paths at the top of the notebook match the actual Kaggle dataset name you published.
-
-Important: the notebook contains a path-name inconsistency in the dataset root strings, so the safest approach is to update `data_root`, `train_dir`, `val_dir`, and `test_dir` together so they all point to the same mounted dataset.
+Before running `tongue_t2d_training.ipynb`, set `cfg.manifest` (or the `MANIFEST` environment variable) to `manifest.csv` inside the mounted dataset; images are read relative to its folder.
 
 ### 3) Train and evaluate
 
 Run the training notebook end to end. It will:
 
-- build the loaders,
-- train all three backbones,
-- save checkpoints in `/kaggle/working`,
-- compare validation metrics,
-- tune the classification threshold,
-- evaluate on the test split,
-- export `val_probs.csv` and `test_probs.csv` and compute the block-level intervals,
-- evaluate on the Kaggle "external" set (not independent, see above),
-- export PR curves, confusion matrices, and Grad-CAM outputs.
+- train every configuration on every fold and append test-fold predictions to `oof_probs.csv`,
+- summarize pooled out-of-fold results in `cv_summary.csv` and the scheme differences in `cv_deltas.csv`,
+- plot `reliability.png` and the Grad-CAM images.
 
 ## 📦 Expected outputs
 
 The training notebook saves artifacts such as:
 
-- `<model_name>_best.pt`
-- `pr_curve.png`
-- `gradcam_debug_internal_test.png`, `gradcam_debug_internal_test_false_positives.png`
-- `val_probs.csv`, `test_probs.csv`
-- `gradcam_debug_external.png`
+- `oof_probs.csv`, `cv_summary.csv`, `cv_deltas.csv`
+- `reliability.png`
+- `gradcam_cv_fold0_test.png`, `gradcam_cv_fold0_false_positives.png`
+- `cluster_resnet50_tongue_fold0.pt` (the only checkpoint kept)
 
 ## ⚠️ Notes and caveats
 
 - The notebooks are Kaggle-oriented and use absolute `/kaggle/...` paths.
 - The data preparation notebook assumes the raw dataset is already available in the Kaggle input mount.
-- The training notebook expects the prepared split dataset to be mounted as a Kaggle dataset.
-- Validation and test splits exclude augmented filenames that contain `__aug_`.
+- The training notebook expects the prepared pool and manifest to be mounted as a Kaggle dataset.
+- Validation and test folds use originals only (`is_orig == 1`).
 - The project is designed for small medical-image datasets, so the modeling choices favor CNN transfer learning over transformers.
 
 ## ✅ Recommended order of execution
@@ -149,7 +131,7 @@ The training notebook saves artifacts such as:
 1. Run `tongue-dataprep.ipynb`.
 2. Publish the generated dataset from `/kaggle/working`.
 3. Mount the published dataset in a fresh Kaggle session.
-4. Update the `CFG` paths in `tongue_t2d_training.ipynb` if needed.
+4. Point `cfg.manifest` in `tongue_t2d_training.ipynb` at the mounted `manifest.csv`.
 5. Run the training notebook.
 
 ## 🔬 Analysis scripts (local)
@@ -164,3 +146,5 @@ The training notebook saves artifacts such as:
 | `render_fp.py` | `render_fp.py BASE FIGS stem...` | Grad-CAM images for chosen false positives |
 | `block_bootstrap.py` | `block_bootstrap.py test_probs.csv [t]` | Participant-block bootstrap intervals |
 | `old_split_leakage.py` | `old_split_leakage.py BASE/data/preprocessedcropped` | Same-participant leakage of the old per-photo split |
+| `identity_clusters.py` | `identity_clusters.py BASE/data/preprocessedcropped OUT` | Prototype of the identity clusters (`clusters.csv`, contact sheets) |
+| `run_nb.py` | `run_nb.py NOTEBOOK KEY=VALUE...` | Runs a notebook's code cells without Jupyter, e.g. `SMOKE=1 MANIFEST=... OUTPUT_BASE=...` |
