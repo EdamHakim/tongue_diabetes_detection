@@ -63,7 +63,7 @@ It uses a binary classification setup with the following techniques:
 - 🔄 Two-stage transfer learning with a warmup phase and a fine-tuning phase.
 - 🧬 Mixup augmentation during training.
 - 📈 Checkpoint selection by validation PR-AUC, ties broken by lower validation loss.
-- 🎚️ Threshold tuning on validation (maximize recall subject to precision ≥ 0.90, ties to the highest threshold).
+- 🎚️ Threshold tuning on validation (maximize recall subject to precision ≥ 0.90, ties to the middle of the tied thresholds).
 - 📏 Pooled out-of-fold ROC-AUC with identity-cluster bootstrap intervals, per-person AUC, paired AUC differences between schemes, PPV at 11.1% and 5% prevalence, Brier score and reliability curve.
 - 🎨 Colour-histogram + logistic-regression baseline on the same folds.
 - 🧭 Grad-CAM for fold 0 of the cluster-scheme ResNet-50, including the highest-scoring false positives.

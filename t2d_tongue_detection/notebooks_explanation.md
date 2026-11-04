@@ -52,7 +52,7 @@ Given the dataset size (~250 unique images per class), Vision Transformers (ViT/
     *   **Two-Stage Training**: A "warmup" phase for the classifier followed by a "fine-tuning" phase where late backbone layers are unfrozen.
 *   **Evaluation & Explainability**:
     *   **Cross-Validation**: Each fold uses the next fold as validation (early stopping, checkpoint, threshold) and is tested once; pooled out-of-fold predictions give AUC with identity-cluster bootstrap intervals, per-person AUC and paired differences between grouping schemes. A colour-histogram baseline runs on the same folds.
-    *   **Threshold Tuning**: Chooses the threshold on validation that maximizes recall with precision ≥ 0.90 (ties to the highest threshold). Precision on a balanced set does not carry over to a screening population, so PPV is also reported at 11.1% and 5% prevalence.
+    *   **Threshold Tuning**: Chooses the threshold on validation that maximizes recall with precision ≥ 0.90 (ties to the middle of the tied thresholds). Precision on a balanced set does not carry over to a screening population, so PPV is also reported at 11.1% and 5% prevalence.
     *   **Grad-CAM Visualization**: Produces heatmaps highlighting the regions of the tongue (e.g., coating, color, or edge cracks) that influenced the model's prediction.
 
 ---
