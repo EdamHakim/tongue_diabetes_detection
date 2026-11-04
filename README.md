@@ -68,7 +68,7 @@ It uses a binary classification setup with the following techniques:
 - 🎨 Colour-histogram + logistic-regression baseline on the same folds.
 - 🧭 Grad-CAM for fold 0 of the cluster-scheme ResNet-50, including the highest-scoring false positives.
 
-Set `RUN_ONLY` (comma-separated `CONFIGS` indices) to split the 30 runs across Kaggle sessions; runs already in `oof_probs.csv` are skipped. `SMOKE=1` runs a one-epoch, three-batch check of every configuration without pretrained weights. The Kaggle "external" set is no longer evaluated: a near-duplicate audit showed that about a third of it re-uses the development photographs.
+To split the 30 runs across Kaggle sessions, edit `RUN_ONLY` (a list of `CONFIGS` indices) in the training cell, and attach the output of earlier sessions as input datasets: every `oof_probs.csv` under `/kaggle/input` is merged and its runs are skipped. Scheme differences (`cv_deltas.csv`) are only computed once both schemes have all five folds. `SMOKE=1` runs a one-epoch, three-batch check of every configuration without pretrained weights. The Kaggle "external" set is no longer evaluated: a near-duplicate audit showed that about a third of it re-uses the development photographs.
 
 ## 🛠️ Requirements
 
