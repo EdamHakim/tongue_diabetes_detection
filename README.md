@@ -70,6 +70,10 @@ It uses a binary classification setup with the following techniques:
 
 To split the 30 runs across Kaggle sessions, edit `RUN_ONLY` (a list of `CONFIGS` indices) in the training cell, and attach the output of earlier sessions as input datasets: every `oof_probs.csv` under `/kaggle/input` is merged and its runs are skipped. Scheme differences (`cv_deltas.csv`) are only computed once both schemes have all five folds. `SMOKE=1` runs a one-epoch, three-batch check of every configuration without pretrained weights. The Kaggle "external" set is no longer evaluated: a near-duplicate audit showed that about a third of it re-uses the development photographs.
 
+## 🔎 Frozen-feature screening
+
+`tongue_features.ipynb` reads the same `manifest.csv` (originals only) and screens pretrained backbones (DINOv2-S/B, ConvNeXt-S, EfficientNetV2-S, ResNet-50) with logistic-regression heads on the identity-cluster folds. It also writes tongue masks (GrabCut seeded by position, eye-checked) to `masks/` for the training notebook. Steps: backbones on the circular mask, then input variants (`full`, `circle`, `seg`, `segcrop`), gray-world white balance, 224 vs 448, and an ensemble of the two finalists; every finalist is also scored on the image corners only. The winner is checked on fresh identity-cluster folds (`fold_s2`, seed 2024) that screening never uses. Outputs: `screen_oof.csv`, `screen_summary.csv`, `screen_choice.json`, `masks/`, `features/`. Needs internet for the pretrained weights; `SMOKE=1` runs a CPU check.
+
 ## 🛠️ Requirements
 
 The notebooks rely on the following main libraries:
