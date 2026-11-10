@@ -68,6 +68,8 @@ It uses a binary classification setup with the following techniques:
 - 🎨 Colour-histogram + logistic-regression baseline on the same folds.
 - 🧭 Grad-CAM for fold 0 of the cluster-scheme ResNet-50, including the highest-scoring false positives.
 
+Configurations are `(scheme, model, input)` strings: `model@v2` selects recipe v2 (train on 4 folds with an inner 10% cluster split, originals only with online flip/affine augmentation, BCE with label smoothing, flip TTA); inputs are `tongue`, `periphery`, `seg` or `segcrop` (tongue masks from `tongue_features`, set `cfg.mask_dir`; v2 only), with optional `+gw` (gray-world) and `@size`; scheme `cluster_s2` uses fresh identity-cluster folds (seed 2024). New backbones: `convnext_s`, `effv2_s`.
+
 To split the 30 runs across Kaggle sessions, edit `RUN_ONLY` (a list of `CONFIGS` indices) in the training cell, and attach the output of earlier sessions as input datasets: every `oof_probs.csv` under `/kaggle/input` is merged and its runs are skipped. Scheme differences (`cv_deltas.csv`) are only computed once both schemes have all five folds. `SMOKE=1` runs a one-epoch, three-batch check of every configuration without pretrained weights. The Kaggle "external" set is no longer evaluated: a near-duplicate audit showed that about a third of it re-uses the development photographs.
 
 ## 🔎 Frozen-feature screening
